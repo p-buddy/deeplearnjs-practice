@@ -172,22 +172,28 @@ var math; //: NDArrayMath;
 var mathGPU; //: NDArrayMathGPU;
 var mathCPU; //: NDArrayMathCPU;
 
-function setupDatasetStats() {
-    var datasetStats = dataSet.getStats();
-    var statsExampleCount = datasetStats[IMAGE_DATA_INDEX].exampleCount;
-    document.getElementById("statsExampleCount").innerHTML = `${statsExampleCount}`;
-    var statsInputRange =
-        `[${datasetStats[IMAGE_DATA_INDEX].inputMin}, ` +
-        `${datasetStats[IMAGE_DATA_INDEX].inputMax}]`;
-    document.getElementById("statsInputRange").innerHTML = `${statsInputRange}`;
-    var statsInputShapeDisplay = getDisplayShape(
-        datasetStats[IMAGE_DATA_INDEX].shape);
-    document.getElementById("statsInputShapeDisplay").innerHTML = `${statsInputShapeDisplay}`;
-    var statsLabelShapeDisplay = getDisplayShape(
-        datasetStats[LABEL_DATA_INDEX].shape);
-    document.getElementById("statsLabelShapeDisplay").innerHTML = `${statsLabelShapeDisplay}`;
-    var showDatasetStats = true;
+var dl = deeplearn;
+var Array1D = dl.Array1D;
+var Array2D = dl.Array2D;
+var Array4D = dl.Array4D;
+
+
+
+function load_weights() {
+    var varLoader = new dl.CheckpointLoader('.');
+
+    varLoader.getAllVariables().then(async vars => {
+      const conv1B = vars['conv1/biases'];
+      const conv1W = vars['conv1/weights'];
+      const conv2W = vars['conv2/weights'];
+
+      console.log(conv1B);
+      console.log(conv1W);
+      console.log(conv2W);
+
+    });
 }
+
 
 function getTestData() {
     const data = dataSet.getData();
@@ -196,109 +202,21 @@ function getTestData() {
     }
     const [images, labels] = dataSet.getData();
 
+    var toprint;
+    for (var i = 0; i < images.length; i++) {
+      toprint = images[i][0]
+    }
+
+    console.log(toprint);
+
     const start = Math.floor(TRAIN_TEST_RATIO * images.length);
+
 
     return [images.slice(start), labels.slice(start)];
 }
 
-function getTrainingData() {
-    const [images, labels] = dataSet.getData();
-
-    const end = Math.floor(TRAIN_TEST_RATIO * images.length);
-
-    return [images.slice(0, end), labels.slice(0, end)];
-}
-
-
-function createOptimizer() {
-    switch (selectedOptimizerName) {
-        case 'sgd':
-            {
-                return new SGDOptimizer(+learningRate);
-            }
-        case 'momentum':
-            {
-                return new MomentumOptimizer(+learningRate, +momentum);
-            }
-        case 'rmsprop':
-            {
-                return new RMSPropOptimizer(+learningRate, +gamma);
-            }
-        case 'adagrad':
-            {
-                return new AdagradOptimizer(+learningRate);
-            }
-        case 'adadelta':
-            {
-                return new AdadeltaOptimizer(+learningRate, +gamma);
-            }
-        case 'adam':
-            {
-                return new AdamOptimizer(+learningRate, +beta1, +beta2);
-            }
-        case 'adamax':
-            {
-                return new AdamaxOptimizer(+learningRate, +beta1, +beta2);
-            }
-        default:
-            {
-                throw new Error(`Unknown optimizer "${selectedOptimizerName}"`);
-            }
-    }
-}
-
-
-
-function startTraining() {
-    const trainingData = getTrainingData();
-    const testData = getTestData();
-
-    // Recreate optimizer with the selected optimizer and hyperparameters.
-    optimizer = createOptimizer();
-
-    if (isValid && (trainingData != null) && (testData != null)) {
-        // recreateCharts();
-        graphRunner.resetStatistics();
-
-        const trainingShuffledInputProviderGenerator =
-            new InCPUMemoryShuffledInputProviderBuilder(trainingData);
-        const [trainInputProvider, trainLabelProvider] =
-        trainingShuffledInputProviderGenerator.getInputProviders();
-
-        const trainFeeds = [{
-                tensor: xTensor,
-                data: trainInputProvider
-            },
-            {
-                tensor: labelTensor,
-                data: trainLabelProvider
-            }
-        ];
-
-        const accuracyShuffledInputProviderGenerator =
-            new InCPUMemoryShuffledInputProviderBuilder(testData);
-        const [accuracyInputProvider, accuracyLabelProvider] =
-        accuracyShuffledInputProviderGenerator.getInputProviders();
-
-        const accuracyFeeds = [{
-                tensor: xTensor,
-                data: accuracyInputProvider
-            },
-            {
-                tensor: labelTensor,
-                data: accuracyLabelProvider
-            }
-        ];
-
-        graphRunner.train(
-            costTensor, trainFeeds, batchSize, optimizer,
-            undefined /** numBatches */ , accuracyTensor, accuracyFeeds,
-            batchSize, MetricReduction.MEAN, EVAL_INTERVAL_MS,
-            COST_INTERVAL_MS);
-
-        showTrainStats = true;
-        applicationState = ApplicationState.TRAINING;
-    }
+function getRandomTest() {
+  const data = dataSet.getData();
 }
 
 function startInference() {
@@ -421,7 +339,6 @@ function updateSelectedDataset(datasetName) {
         dataSet.removeNormalization(IMAGE_DATA_INDEX);
     }
 
-    graphRunner.stopTraining();
     graphRunner.stopInferring();
 
     if (dataSet != null) {
@@ -437,7 +354,6 @@ function updateSelectedDataset(datasetName) {
     dataSet.fetchData().then(() => {
         datasetDownloaded = true;
         applyNormalization(selectedNormalizationOption);
-        setupDatasetStats();
         if (isValid) {
             console.log('selected dataset');
             createModel();
@@ -467,7 +383,7 @@ function updateSelectedDataset(datasetName) {
     insertLayerTableRow(outputLayer, 'output-layer', labelShapeDisplay, null);
 
     // Setup the inference example container.
-    // TODO(nsthorat): Generalize 
+    // TODO(nsthorat): Generalize
     const inferenceContainer =
         document.querySelector('#inference-container');
     inferenceContainer.innerHTML = '';
@@ -544,7 +460,7 @@ function applyNormalization(selectedNormalizationOption) {
                 throw new Error('Normalization option must be 0, 1, or 2');
             }
     }
-    setupDatasetStats();
+
 }
 
 
@@ -624,7 +540,6 @@ function addLayer() {
     // modelLayer.appendChild(document.createElement("br"));
     // modelLayer.className = 'model-layer';
 
-
     const lastHiddenLayer = hiddenLayers[this.hiddenLayers.length - 1];
     const lastOutputShape = lastHiddenLayer != null ?
         lastHiddenLayer.getOutputShape() :
@@ -663,48 +578,6 @@ function loadModelFromPath(modelPath) {
         throw new Error(`Model could not be fetched from ${modelPath}: ${error}`);
     };
     xhr.send();
-}
-
-function displayBatchesTrained(totalBatchesTrained) {
-    examplesTrained = batchSize * totalBatchesTrained;
-    document.getElementById("examplesTrained").innerHTML = `Examples trained: ${examplesTrained}`
-}
-
-var lossGraph = new cnnvis.Graph();
-var lossWindow = new cnnutil.Window(100);
-
-function displayCost(avgCost) {
-
-    var cost = avgCost.get();
-    var batchesTrained = graphRunner.getTotalBatchesTrained();
-
-    lossWindow.add(cost);
-
-    var xa = lossWindow.get_average();
-
-    if (xa >= 0) { // if they are -1 it means not enough data was accumulated yet for estimates
-        lossGraph.add(batchesTrained, xa);
-        lossGraph.drawSelf(document.getElementById("lossgraph"));
-    }
-}
-
-
-var accuracyGraph = new cnnvis.Graph();
-var accuracyWindow = new cnnutil.Window(100);
-
-function displayAccuracy(accuracy) {
-
-    var accuracy = accuracy.get() * 100;
-    var batchesTrained = graphRunner.getTotalBatchesTrained();
-
-    accuracyWindow.add(accuracy);
-
-    var xa = accuracyWindow.get_average();
-
-    if (xa >= 0) { // if they are -1 it means not enough data was accumulated yet for estimates
-        accuracyGraph.add(batchesTrained, xa);
-        accuracyGraph.drawSelf(document.getElementById("accuracygraph"));
-    }
 }
 
 
@@ -756,118 +629,17 @@ function displayInferenceExamplesPerSec(examplesPerSec) {
 }
 
 
-var examplesPerSecGraph = new cnnvis.Graph();
-var examplesPerSecWindow = new cnnutil.Window(100);
-
-function displayExamplesPerSec(_examplesPerSec) {
-
-
-    var batchesTrained = graphRunner.getTotalBatchesTrained();
-
-    examplesPerSecWindow.add(_examplesPerSec);
-
-    var xa = examplesPerSecWindow.get_average();
-
-    if (xa >= 0) { // if they are -1 it means not enough data was accumulated yet for estimates
-        examplesPerSecGraph.add(batchesTrained, xa);
-        examplesPerSecGraph.drawSelf(document.getElementById("examplespersecgraph"));
-    }
-
-    examplesPerSec =
-        smoothExamplesPerSec(examplesPerSec, _examplesPerSec);
-
-    document.getElementById("examplesPerSec").innerHTML = `Examples/sec: ${examplesPerSec}`;
-}
-
-
-function refreshHyperParamRequirements(optimizerName) {
-    needMomentum = false;
-    needGamma = false;
-    needBeta1 = false;
-    needBeta2 = false;
-    switch (optimizerName) {
-        case 'sgd':
-            {
-                // No additional hyper parameters
-                break;
-            }
-        case 'momentum':
-            {
-                needMomentum = true;
-                break;
-            }
-        case 'rmsprop':
-            {
-                needMomentum = true;
-                needGamma = true;
-                break;
-            }
-        case 'adagrad':
-            {
-                break;
-            }
-        case 'adadelta':
-            {
-                needGamma = true;
-                break;
-            }
-        case 'adam':
-            {
-                needBeta1 = true;
-                needBeta2 = true;
-                break;
-            }
-        case 'adamax':
-            {
-                needBeta1 = true;
-                needBeta2 = true;
-                break;
-            }
-        default:
-            {
-                throw new Error(`Unknown optimizer "${selectedOptimizerName}"`);
-            }
-    }
-}
-
 mathGPU = new NDArrayMathGPU();
 mathCPU = new NDArrayMathCPU();
 
 function run() {
-
-    learningRate = 0.1;
-    momentum = 0.1;
-    eedMomentum = true;
-    gamma = 0.1;
-    needGamma = false;
-    beta1 = 0.9;
-    needBeta1 = false;
-    beta2 = 0.999;
-    needBeta2 = false;
-    batchSize = 64;
-
-    updateNetParamDisplay();
-
-
-
-    var normalizationDropdown = document.getElementById("normalization-dropdown");
-    normalizationDropdown.options[selectedNormalizationOption].selected = 'selected';
-
-    // Default optimizer is momentum
-    selectedOptimizerName = 'momentum';
-    // optimizerNames = ['sgd', 'momentum', 'rmsprop', 'adagrad', 'adadelta', 'adam', 'adamax'];
-    var optimizerDropdown = document.getElementById("optimizer-dropdown");
-    var ind = indexOfDropdownOptions(optimizerDropdown.options, selectedOptimizerName);
-    optimizerDropdown.options[ind].selected = 'selected';
-
     // math = mathGPU;
     var envDropdown = document.getElementById("environment-dropdown");
     selectedEnvName = 'GPU';
     var ind = indexOfDropdownOptions(envDropdown.options, selectedEnvName)
     envDropdown.options[ind].selected = 'selected';
     updateSelectedEnvironment(selectedEnvName, graphRunner);
-    optimizer = new MomentumOptimizer(learningRate, momentum);
-    
+
     const eventObserver = {
         batchesTrainedCallback: (batchesTrained) =>
             displayBatchesTrained(batchesTrained),
@@ -892,12 +664,12 @@ function run() {
 
     document.querySelector('#dataset-dropdown').addEventListener(
         'change', (event) => {
-            
+
             if (graphRunner != null) {
                      graphRunner = null;
             }
             graphRunner = new GraphRunner(math, session, eventObserver);
-            
+
             // Update the dataset.
             const datasetName = event.target.value;
             updateSelectedDataset(datasetName);
@@ -908,36 +680,18 @@ function run() {
         });
     document.querySelector('#model-dropdown').addEventListener(
         'change', (event) => {
-            
+
             if (graphRunner != null) {
                      graphRunner = null;
             }
             graphRunner = new GraphRunner(math, session, eventObserver);
-            
+
             // Update the model.
 
             const modelName = event.target.value;
             updateSelectedModel(modelName);
             console.log('model =', modelName)
         });
-
-    {
-        const normalizationDropdown =
-            document.querySelector('#normalization-dropdown');
-        normalizationDropdown.addEventListener('change', (event) => {
-            const selectedNormalizationOption = Number(event.target.value);
-
-            console.log('normalization =', event.target.options[selectedNormalizationOption].innerHTML);
-            applyNormalization(selectedNormalizationOption);
-            setupDatasetStats();
-        });
-    }
-    document.querySelector('#optimizer-dropdown').addEventListener('change', (event) => {
-        // Activate, deactivate hyper parameter inputs.
-        refreshHyperParamRequirements(event.target.value);
-        selectedOptimizerName = event.target.value;
-        console.log('optimizer =', event.target.value)
-    });
 
 
     applicationState = ApplicationState.IDLE;
@@ -979,27 +733,6 @@ function updateSelectedEnvironment(selectedEnvName, _graphRunner = null) {
 
 }
 
-
-// user settings
-var change_lr = function () {
-    learningRate = parseFloat(document.getElementById("lr_input").value);
-    graphRunner.optimizer.learningRate = learningRate;
-    console.log('learning rate changed to' + learningRate);
-    updateNetParamDisplay();
-}
-var change_momentum = function () {
-    momentum = parseFloat(document.getElementById("momentum_input").value);
-    graphRunner.optimizer.momentum = momentum;
-    console.log('momentum changed to' + momentum);
-    updateNetParamDisplay();
-}
-var change_batch_size = function () {
-    batchSize = parseFloat(document.getElementById("batch_size_input").value);
-    graphRunner.batchSize = batchSize;
-    console.log('batch size changed to' + batchSize);
-    updateNetParamDisplay();
-}
-
 var infer_request = null;
 var btn_infer = document.getElementById('buttoninfer');
 var infer_paused = true;
@@ -1026,30 +759,10 @@ btn_infer.addEventListener('click', () => {
 
 
 var train_request = null;
-var btn_train = document.getElementById('buttontrain');
 var train_paused = true;
-btn_train.addEventListener('click', () => {
-    train_paused = !train_paused;
-
-    if (train_paused) {
-        if (graphRunner != null) {
-            graphRunner.stopTraining();
-        }
-        btn_train.value = 'Start Training';
-
-    } else {
-
-        train_request = true;
-
-        btn_train.value = 'Pause Training';
-
-    }
-});
 
 var updateNetParamDisplay = function () {
-    document.getElementById('lr_input').value = learningRate;
-    document.getElementById('momentum_input').value = momentum;
-    document.getElementById('batch_size_input').value = batchSize;
+    var z = 1;
     // document.getElementById('decay_input').value = trainer.l2_decay;
 }
 
@@ -1060,13 +773,11 @@ function monitor() {
         btn_infer.disabled = true;
         btn_infer.value = 'Initializing Model ...'
         // btn_train.disabled = true;
-        btn_train.style.visibility = 'hidden';
 
     } else {
         if (isValid) {
 
             btn_infer.disabled = false;
-            btn_train.style.visibility = 'visible';
 
             if (infer_paused) {
                 btn_infer.value = 'Start Infering'
@@ -1074,27 +785,6 @@ function monitor() {
                 btn_infer.value = 'Stop Infering'
             }
 
-            if (train_paused) {
-                btn_train.value = 'Start Training'
-            } else {
-                btn_train.value = 'Stop Training'
-            }
-
-
-            if (train_request) {
-                train_request = false;
-                // createModel();
-                if (graphRunner.getTotalBatchesTrained() > 0) {
-                    graphRunner.resumeTraining()
-                } else {
-                    examplesPerSecGraph.pts = [];
-                    accuracyGraph.pts = [];
-                    lossGraph.pts = [];
-
-                    startTraining();
-                }
-
-            }
 
             if (infer_request) {
                 infer_request = false;
@@ -1106,8 +796,6 @@ function monitor() {
             // btn_infer.className = 'btn btn-danger btn-md';
             btn_infer.disabled = true;
             btn_infer.value = 'Model not valid or being reinitialized'
-            // btn_train.disabled = true;
-            btn_train.style.visibility = 'hidden';
         }
     }
 
@@ -1121,11 +809,11 @@ function start() {
 
     supported = detect_support();
     supported = true;
+    load_weights();
 
     if (supported) {
         console.log('device & webgl supported');
         btn_infer.disabled = false;
-        btn_train.disabled = false;
 
         setTimeout(function () {
 
@@ -1138,7 +826,6 @@ function start() {
     } else {
         console.log('device/webgl not supported')
         btn_infer.disabled = true;
-        btn_train.disabled = true;
     }
 
 
